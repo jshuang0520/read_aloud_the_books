@@ -5,29 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF Reader with Real-Time Sync</title>
     <style>
-        #text-display {
-            font-size: 18px;
-            line-height: 1.6;
-            white-space: pre-wrap;  /* Preserve line breaks and spacing */
-        }
+        #text-display { font-size: 18px; line-height: 1.6; }
         .highlight { background-color: yellow; }
-        .controls { position: sticky; top: 0; background: #f9f9f9; padding: 10px; z-index: 1000; }
+        .controls { position: fixed; top: 0; width: 100%; background: #f9f9f9; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
     </style>
 </head>
 <body>
-    <h1>PDF Reader with Text Highlighting</h1>
     <div class="controls">
-        <button onclick="play()">Play</button>
+        <button onclick="initializePlay()">Initialize and Play</button>
+        <button onclick="resume()">Resume</button>
         <button onclick="pause()">Pause</button>
         <button onclick="stop()">Stop</button>
-        <button onclick="goBack()">Go Back 5 Seconds</button>
-        <button onclick="goForward()">Go Forward 5 Seconds</button>
+        <input type="range" id="progress-bar" value="0" max="100" step="1" onchange="seekToPosition()">
         <button onclick="saveBookmark()">Bookmark</button>
         <input type="file" id="pdf-file">
-        <input type="number" id="rate" placeholder="Rate (words per minute)" value="150">
-        <input type="number" id="start-page" placeholder="Start Page" value="0">
         <button onclick="uploadAndLoadText()">Upload and Load Text</button>
     </div>
+
+    <h1>PDF Reader with Text Highlighting</h1>
     <div id="text-display"></div>
 
     <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
@@ -35,40 +30,13 @@
         const socket = io();
         let textData = [];
         let currentPosition = 0;
-        let readingSpeed = 200;
 
-        async function loadText() {
-            const response = await fetch("/load_text", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: new URLSearchParams({ pdf_path: "sample.pdf" })
-            });
-            const data = await response.json();
-            textData = data.text_data.split(" ");  // Splitting by words for highlight tracking
-            currentPosition = data.start_position;
-            readingSpeed = data.rate;
-            displayText();
+        function initializePlay() {
+            socket.emit('control', { command: 'initialize', text_data: textData.join(" "), start_position: currentPosition });
         }
 
-        function displayText() {
-            const textDisplay = document.getElementById("text-display");
-            textDisplay.innerHTML = textData
-                .map((word, i) => i === currentPosition ? `<span class="highlight">${word}</span>` : word)
-                .join(" ");
-        }
-
-        socket.on('highlight_word', (data) => {
-            currentPosition = data.position;
-            displayText();
-        });
-
-        socket.on('reset_position', (data) => {
-            currentPosition = data.position;
-            displayText();
-        });
-
-        function play() {
-            socket.emit('control', { command: 'play', text_data: textData.join(" "), start_position: currentPosition, rate: readingSpeed });
+        function resume() {
+            socket.emit('control', { command: 'resume', text_data: textData.join(" "), start_position: currentPosition });
         }
 
         function pause() {
@@ -80,29 +48,8 @@
             socket.emit('control', { command: 'stop' });
         }
 
-        function goBack() {
-            socket.emit('control', { command: 'go_back', text_data: textData.join(" "), rate: readingSpeed });
-        }
-
-        function goForward() {
-            socket.emit('control', { command: 'go_forward', text_data: textData.join(" "), rate: readingSpeed });
-        }
-
-        async function saveBookmark() {
-            const response = await fetch("/bookmark", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ page: 0, position: currentPosition })
-            });
-            const result = await response.json();
-            alert(result.status);
-        }
-
         async function uploadAndLoadText() {
             const fileInput = document.getElementById("pdf-file");
-            const rate = document.getElementById("rate").value;
-            const startPage = document.getElementById("start-page").value;
-
             if (fileInput.files.length === 0) {
                 alert("Please select a PDF file to upload.");
                 return;
@@ -125,18 +72,40 @@
             const loadTextResponse = await fetch("/load_text", {
                 method: "POST",
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: new URLSearchParams({ pdf_path: uploadData.file_path, rate: rate, start_page: startPage })
+                body: new URLSearchParams({ pdf_path: uploadData.file_path })
             });
 
             const loadTextData = await loadTextResponse.json();
             if (loadTextData.error) {
                 alert(loadTextData.error);
             } else {
-                textData = loadTextData.text_data.split(" ");  // Splitting by words
+                textData = loadTextData.text_data.split(" ");
                 currentPosition = loadTextData.start_position;
-                readingSpeed = loadTextData.rate;
                 displayText();
             }
+        }
+
+        function displayText() {
+            const textDisplay = document.getElementById("text-display");
+            textDisplay.innerHTML = textData
+                .map((word, i) => i === currentPosition ? `<span class="highlight">${word}</span>` : word)
+                .join(" ");
+        }
+
+        socket.on('highlight_word', (data) => {
+            currentPosition = data.position;
+            displayText();
+        });
+
+        socket.on('update_progress', (data) => {
+            document.getElementById('progress-bar').value = data.progress;
+        });
+
+        function seekToPosition() {
+            const newPosition = document.getElementById("progress-bar").value;
+            currentPosition = Math.floor((newPosition / 100) * textData.length);
+            displayText();
+            resume();
         }
     </script>
 </body>
