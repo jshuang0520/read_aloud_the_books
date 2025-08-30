@@ -5,7 +5,8 @@ Convert PDFs to natural audiobooks by improving early HF TTS models (facebook/mm
 
 ## demo
 
-[▶️ Play the demo](https://jshuang0520.github.io/read_aloud_the_books/player.html)
+This audio file would read aloud the paragraph in the following screenshot
 
+[▶️ Play the demo](https://jshuang0520.github.io/read_aloud_the_books/player.html)
 
 ![partial_p29.jpg](demo/partial_p29.jpg)
